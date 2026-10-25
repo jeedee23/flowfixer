@@ -3,12 +3,27 @@ Document: FLOWFIX_COPILOT_HANDOFF.md
 Purpose: Implementation handoff for GitHub Copilot / VS Code — FlowFix G-code editor with persistent revision history
 Created: 2026-10-25
 Last modified: 2026-10-25
-Version: 1.0
+Version: 1.1
 Changelog:
+  1.1 — Link implemented 0.2.0 application, policies, tests and remaining platform validation.
   1.0 — Document current behavior, known limitations, repository design, JSON action history, GUI requirements, tests and implementation phases.
 -->
 
 # FlowFix — GitHub Copilot handoff
+
+## Implementation status (0.2.0, 2026-10-25)
+
+The application now has a streaming, byte-preserving core, validated shared
+settings, immutable per-content originals/revisions, append-only JSON events,
+OS-backed workspace locking, recovery, and a responsive Tkinter history GUI.
+The original script is now the launcher; the baseline descriptions below remain
+historical context, not a description of the refactored source layout.
+
+See [README.md](README.md) for exact policies, launch commands and recovery;
+see [tests/](tests/) for processing, storage and real-Tk integration tests.
+Existing M221 commands retain baseline handling with an explicit warning.
+Exports never overwrite. Legacy log migration remains opt-in future work;
+the old log is untouched. Native Windows smoke testing remains outstanding.
 
 ## 1. Mission
 

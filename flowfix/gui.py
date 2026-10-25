@@ -1,7 +1,8 @@
 # File: flowfix/gui.py
 # Purpose: Responsive Tkinter editor with original-specific revision history.
-# Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.0 - Add asynchronous import/process, history, compare and recovery.
+# Version: 0.2.1 | Created: 2026-10-25 | Modified: 2026-10-25
+# Changelog: 0.2.1 - Scale table rows to fonts and reserve visible revision space.
+# 0.2.0 - Add asynchronous import/process, history, compare and recovery.
 
 from concurrent.futures import Future, ThreadPoolExecutor
 import json
@@ -9,7 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, font, messagebox, ttk
 from typing import Any, Callable
 
 from . import __version__
@@ -48,6 +49,7 @@ class App(tk.Tk):
         self.original_var = tk.StringVar(value="Import an original or reopen one from the library.")
         self.status_var = tk.StringVar(value="Ready")
         self.warning_var = tk.StringVar()
+        self._configure_table_style()
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._close)
         self._submit(self.workspace.list_originals, self._set_library, "Loading library")
@@ -58,20 +60,61 @@ class App(tk.Tk):
         self.controls.append(button)
         return button
 
+    def _configure_table_style(self):
+        self.table_font = font.nametofont("TkDefaultFont").copy()
+        if 0 < self.table_font.cget("size") < 11:
+            self.table_font.configure(size=11)
+        self.table_heading_font = self.table_font.copy()
+        self.table_heading_font.configure(weight="bold")
+        self.table_row_height = max(32, self.table_font.metrics("linespace") + 12)
+        style = ttk.Style(self)
+        style.configure(
+            "FlowFix.Treeview", font=self.table_font, rowheight=self.table_row_height,
+        )
+        style.configure(
+            "FlowFix.Treeview.Heading", font=self.table_heading_font, padding=(6, 6),
+        )
+
     def _build_ui(self):
-        top = ttk.Frame(self, padding=10)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1, minsize=140)
+        self.rowconfigure(1, weight=2, minsize=self.table_row_height * 4 + 80)
+        settings_area = ttk.Frame(self)
+        settings_area.grid(row=0, column=0, sticky="nsew")
+        self.settings_canvas = tk.Canvas(settings_area, highlightthickness=0, height=480)
+        settings_scroll = ttk.Scrollbar(
+            settings_area, orient="vertical", command=self.settings_canvas.yview,
+        )
+        self.settings_canvas.configure(yscrollcommand=settings_scroll.set)
+        settings_scroll.pack(side="right", fill="y")
+        self.settings_canvas.pack(side="left", fill="both", expand=True)
+        controls_frame = ttk.Frame(self.settings_canvas)
+        controls_window = self.settings_canvas.create_window(
+            (0, 0), window=controls_frame, anchor="nw",
+        )
+        controls_frame.bind(
+            "<Configure>",
+            lambda _event: self.settings_canvas.configure(
+                scrollregion=self.settings_canvas.bbox("all"),
+            ),
+        )
+        self.settings_canvas.bind(
+            "<Configure>",
+            lambda event: self.settings_canvas.itemconfigure(controls_window, width=event.width),
+        )
+        top = ttk.Frame(controls_frame, padding=10)
         top.pack(fill="x")
         self._button(top, "Import original...", self._browse)
         self.library_combo = ttk.Combobox(top, state="readonly", width=55)
         self.library_combo.pack(side="left", fill="x", expand=True, padx=6)
         self._button(top, "Open stored original", self._open_stored)
         self._button(top, "Open workspace", self._open_workspace)
-        ttk.Label(self, textvariable=self.original_var, padding=(10, 0)).pack(anchor="w")
-        ttk.Entry(self, textvariable=self.input_var, state="readonly").pack(fill="x", padx=10)
-        ttk.Label(self, textvariable=self.warning_var, foreground="#9b3600",
+        ttk.Label(controls_frame, textvariable=self.original_var, padding=(10, 0)).pack(anchor="w")
+        ttk.Entry(controls_frame, textvariable=self.input_var, state="readonly").pack(fill="x", padx=10)
+        ttk.Label(controls_frame, textvariable=self.warning_var, foreground="#9b3600",
                   wraplength=1150, padding=(10, 4)).pack(anchor="w")
 
-        settings_frame = ttk.LabelFrame(self, text="Draft settings (saved with each processing run)", padding=8)
+        settings_frame = ttk.LabelFrame(controls_frame, text="Draft settings (saved with each processing run)", padding=8)
         settings_frame.pack(fill="x", padx=10, pady=4)
         self.setting_vars: dict[str, tk.StringVar] = {}
         defaults = FlowFixSettings().to_dict()
@@ -91,11 +134,11 @@ class App(tk.Tk):
             wraplength=1100,
         ).grid(row=4, column=0, columnspan=4, sticky="w")
 
-        ranges = ttk.LabelFrame(self, text="Between-layer ranges (both bounds inclusive)", padding=8)
+        ranges = ttk.LabelFrame(controls_frame, text="Between-layer ranges (both bounds inclusive)", padding=8)
         ranges.pack(fill="x", padx=10, pady=4)
         self.range_tree = ttk.Treeview(
             ranges, columns=("from", "until", "flow"), show="headings", height=4,
-            selectmode="browse",
+            selectmode="browse", style="FlowFix.Treeview",
         )
         for name, heading in (("from", "From layer"), ("until", "Until layer"), ("flow", "Flow (%)")):
             self.range_tree.heading(name, text=heading)
@@ -118,19 +161,19 @@ class App(tk.Tk):
         self._button(range_actions, "Clear inputs", self._clear_between_range_inputs)
 
         actions = ttk.Frame(self, padding=(10, 4))
-        actions.pack(fill="x")
+        actions.grid(row=2, column=0, sticky="ew")
         self._button(actions, "Process: new revision", self._run)
         self._button(actions, "Load previous settings", self._restore)
         self._button(actions, "Compare two runs", self._compare)
         self._button(actions, "View revision", self._view_revision)
         secondary_actions = ttk.Frame(self, padding=(10, 0))
-        secondary_actions.pack(fill="x")
+        secondary_actions.grid(row=3, column=0, sticky="ew")
         self._button(secondary_actions, "Export revision...", self._export)
         self._button(secondary_actions, "Refresh history", self._refresh)
         self._button(secondary_actions, "Verify / rebuild indexes", self._rebuild)
 
         notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=10, pady=4)
+        notebook.grid(row=1, column=0, sticky="nsew", padx=10, pady=4)
         history_frame = ttk.Frame(notebook)
         revision_frame = ttk.Frame(notebook)
         details_frame = ttk.Frame(notebook)
@@ -155,7 +198,7 @@ class App(tk.Tk):
         scrollbar.pack(side="right", fill="y")
         self.details.configure(yscrollcommand=scrollbar.set)
         footer = ttk.Frame(self, padding=(10, 4))
-        footer.pack(fill="x")
+        footer.grid(row=4, column=0, sticky="ew")
         ttk.Label(footer, textvariable=self.status_var).pack(side="left", fill="x", expand=True)
         self.progress = ttk.Progressbar(footer, mode="indeterminate", length=160)
         self.progress.pack(side="right")
@@ -163,7 +206,10 @@ class App(tk.Tk):
     def _table(self, parent, columns):
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True)
-        tree = ttk.Treeview(frame, columns=[c[0] for c in columns], show="headings")
+        tree = ttk.Treeview(
+            frame, columns=[c[0] for c in columns], show="headings",
+            style="FlowFix.Treeview",
+        )
         for name, label, width in columns:
             tree.heading(name, text=label)
             tree.column(name, width=width, minwidth=40)

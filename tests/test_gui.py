@@ -1,7 +1,8 @@
 # File: tests/test_gui.py
 # Purpose: Real-Tk smoke tests for asynchronous revision workflows.
-# Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.0 - Exercise range editing, history, export and worker failures.
+# Version: 0.2.1 | Created: 2026-10-25 | Modified: 2026-10-25
+# Changelog: 0.2.1 - Verify readable rows and actual pointer selection on scaled Tk.
+# 0.2.0 - Exercise range editing, history, export and worker failures.
 
 from pathlib import Path
 import tempfile
@@ -167,6 +168,29 @@ class GuiTests(unittest.TestCase):
         self.wait()
         self.assertNotEqual(thread_ids, [main_thread])
         self.showerror.assert_not_called()
+
+    def test_revision_rows_visible_readable_and_clickable_in_small_window(self):
+        self.import_source()
+        self.app._run()
+        self.wait()
+        revision = self.app.revision_tree.get_children()[0]
+        self.app.geometry("1000x700")
+        self.app.deiconify()
+        self.app.notebook.select(1)
+        self.app.update()
+        tree = self.app.revision_tree
+        bounds = tree.bbox(revision)
+        self.assertTrue(bounds, "Revision must be visible without resizing the window.")
+        x, y, width, height = bounds
+        self.assertGreaterEqual(height, self.app.table_font.metrics("linespace") + 12)
+        self.assertGreaterEqual(height, 32)
+        self.assertGreaterEqual(tree.winfo_height(), height * 3)
+        tree.event_generate("<Button-1>", x=x + 30, y=y + height // 2)
+        tree.event_generate("<ButtonRelease-1>", x=x + 30, y=y + height // 2)
+        self.app.update()
+        self.assertEqual(tree.selection(), (revision,))
+        self.assertEqual(self.app._selected_revisions(1), [revision])
+        self.assertTrue(self.app.settings_canvas.yview()[1] < 1.0)
 
 
 if __name__ == "__main__":

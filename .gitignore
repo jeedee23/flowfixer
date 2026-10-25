@@ -1,0 +1,6 @@
+# Persistent local data can contain private G-code, paths and settings.
+/workspace/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/

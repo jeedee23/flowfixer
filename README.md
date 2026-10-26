@@ -1,8 +1,9 @@
 <!--
 File: README.md
 Purpose: FlowFix usage, processing policy, storage and recovery.
-Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-Changelog: 0.2.0 - Document streaming editor and persistent JSON revisions.
+Version: 0.2.1 | Created: 2026-10-25 | Modified: 2026-10-25
+Changelog: 0.2.1 - Document readable tables and scrollable settings layout.
+0.2.0 - Document streaming editor and persistent JSON revisions.
 -->
 
 # FlowFix
@@ -39,7 +40,12 @@ implemented, but native Windows smoke testing is still required.
    input file moved or no longer exists.
 
 All file-intensive operations run on one worker; Tkinter stays on the main
-thread. Wait for operations to finish before closing. Draft edits are not logged
+thread. Tables use font-aware padded rows for scaled displays. The history and
+revision area retains visible space in smaller windows; use the upper panel's
+vertical scrollbar to reach settings and range controls. Processing and export
+buttons remain below the tables.
+
+Wait for operations to finish before closing. Draft edits are not logged
 per keystroke: processing records complete applied settings and changes from the
 previous successful run. Explicit settings restoration records a draft action.
 

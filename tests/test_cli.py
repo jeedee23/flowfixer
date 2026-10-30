@@ -1,7 +1,8 @@
 # File: tests/test_cli.py
 # Purpose: Verify portable launch options and headless recovery exit status.
-# Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.0 - Exercise CLI from an unrelated working directory.
+# Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+# Changelog: 0.2.2 - Check current application version.
+# 0.2.0 - Exercise CLI from an unrelated working directory.
 
 import json
 import os
@@ -12,6 +13,7 @@ import tempfile
 import unittest
 
 from flowfix.models import FlowFixSettings
+from flowfix import __version__
 from flowfix.storage import Workspace
 
 SCRIPT = Path(__file__).resolve().parents[1] / "flowfixer_updated.py"
@@ -32,7 +34,7 @@ class CliTests(unittest.TestCase):
     def test_version_without_workspace_creation(self):
         result = self.invoke("--version", FLOWFIX_WORKSPACE=str(self.root / "not-created"))
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "0.2.0")
+        self.assertEqual(result.stdout.strip(), __version__)
         self.assertFalse((self.root / "not-created").exists())
 
     def test_workspace_option_overrides_environment_and_needs_no_display(self):

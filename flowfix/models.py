@@ -1,7 +1,8 @@
 # File: flowfix/models.py
 # Purpose: Shared settings, validation, and settings comparisons.
-# Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.0 - Centralize validation outside Tkinter.
+# Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+# Changelog: 0.2.2 - Add plunge depth; preserve legacy history with depth zero.
+# 0.2.0 - Centralize validation outside Tkinter.
 
 from dataclasses import asdict, dataclass, field, fields
 import math
@@ -26,6 +27,7 @@ class FlowFixSettings:
     last_layers_restore_flow_percent: int = 97
     between_ranges: list[BetweenRange] = field(default_factory=list)
     output_suffix: str = "_flowfix"
+    plunge_into_belt_mm: float = 0.8
 
     def validate(self) -> None:
         for name in (
@@ -41,6 +43,13 @@ class FlowFixSettings:
             or not math.isfinite(self.threshold_y)
         ):
             raise ValueError("Threshold Y must be a finite number.")
+        if (
+            isinstance(self.plunge_into_belt_mm, bool)
+            or not isinstance(self.plunge_into_belt_mm, (int, float))
+            or not math.isfinite(self.plunge_into_belt_mm)
+            or self.plunge_into_belt_mm < 0
+        ):
+            raise ValueError("Plunge into belt must be a finite depth of 0 mm or greater.")
         if not isinstance(self.output_suffix, str) or not self.output_suffix.strip():
             raise ValueError("Output suffix cannot be empty.")
         if any(c in self.output_suffix for c in '<>:"/\\|?*\0') or any(
@@ -70,6 +79,8 @@ class FlowFixSettings:
         if not isinstance(value, dict):
             raise ValueError("Settings must be a JSON object.")
         names = {item.name for item in fields(cls)}
+        if set(value) == names - {"plunge_into_belt_mm"}:
+            value = {**value, "plunge_into_belt_mm": 0.0}
         if set(value) != names:
             raise ValueError("Settings fields do not match schema version 1.")
         ranges = value["between_ranges"]

@@ -1,7 +1,8 @@
 # File: tests/test_storage.py
 # Purpose: Persistence, immutability, locking and recovery integration tests.
-# Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.0 - Verify revision lifecycle, failures, exports and rebuilds.
+# Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+# Changelog: 0.2.2 - Verify legacy plunge compatibility and rejected-run history.
+# 0.2.0 - Verify revision lifecycle, failures, exports and rebuilds.
 
 import json
 from pathlib import Path
@@ -246,6 +247,39 @@ class StorageTests(unittest.TestCase):
         event = self.workspace.history(self.original_id)[-1]
         self.assertEqual(event["metadata"]["operation"], "restore_settings")
         self.assertEqual(self.source.read_bytes(), self.data)
+
+    def test_pre_plunge_history_still_loads_restores_and_rebuilds(self):
+        run = self.run_revision(plunge_into_belt_mm=0)
+        directory = self.workspace.original_dir(self.original_id)
+        path = next(p for p in (directory / "events").glob("*.json")
+                    if run["event_id"] in p.name)
+        legacy_event = json.loads(path.read_text())
+        del legacy_event["settings"]["plunge_into_belt_mm"]
+        del legacy_event["results"]["inserted_belt_plunges"]
+        path.write_text(json.dumps(legacy_event))
+        original_bytes = path.read_bytes()
+        restarted = Workspace(self.workspace.root)
+        self.assertEqual(len(restarted.history(self.original_id)), 2)
+        restored = restarted.restore_settings(self.original_id, run["output_revision_id"])
+        self.assertEqual(restored.plunge_into_belt_mm, 0)
+        repeated = restarted.process(self.original_id, restored)
+        self.assertEqual(repeated["output_sha256"], run["output_sha256"])
+        self.assertFalse(restarted.rebuild()["issues"])
+        self.assertEqual(path.read_bytes(), original_bytes)
+
+    def test_duplicate_plunge_fails_without_publishing_revision(self):
+        self.source.write_bytes(b"G90\nG21\nG28\nG0 Y-0.7\nG92 Y0\n;LAYER:0\n")
+        original_id = self.workspace.import_original(self.source)["original_id"]
+        before = self.source.read_bytes()
+        with self.assertRaisesRegex(ValueError, "already contains"):
+            self.workspace.process(original_id, FlowFixSettings())
+        event = self.workspace.history(original_id)[-1]
+        self.assertEqual(event["status"], "error")
+        self.assertEqual(event["type"], "error")
+        self.assertEqual(list(
+            (self.workspace.original_dir(original_id) / "revisions").glob("*.gcode")
+        ), [])
+        self.assertEqual(self.source.read_bytes(), before)
 
 
 if __name__ == "__main__":

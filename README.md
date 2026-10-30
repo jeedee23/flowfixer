@@ -1,8 +1,9 @@
 <!--
 File: README.md
 Purpose: FlowFix usage, processing policy, storage and recovery.
-Version: 0.2.1 | Created: 2026-10-25 | Modified: 2026-10-25
-Changelog: 0.2.1 - Document readable tables and scrollable settings layout.
+Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+Changelog: 0.2.2 - Document configurable plunge and legacy settings compatibility.
+0.2.1 - Document readable tables and scrollable settings layout.
 0.2.0 - Document streaming editor and persistent JSON revisions.
 -->
 
@@ -52,7 +53,8 @@ previous successful run. Explicit settings restoration records a draft action.
 ## Exact processing policy
 
 Only `G1` moves with an explicit numeric `Y` before a `;` comment trigger flow
-switching. Other lines are preserved byte-for-byte.
+switching. Source lines are preserved byte-for-byte; the optional startup
+plunge below adds commands after homing.
 
 1. `Y < threshold_y`: low flow (default 50%).
 2. Otherwise, a matching inclusive layer range: its configured percentage.
@@ -65,6 +67,39 @@ regions overlap, first layers win (baseline behavior). Ranges 1–20 and 20–30
 overlap; 1–20 and 21–30 do not. Percentages are positive integers, with no new
 arbitrary upper cap; layer indices/counts must be nonnegative and Y must be
 finite.
+
+### Plunge into belt
+
+**Plunge into belt (mm; 0 = off)** defaults to **0.8 mm** for new settings.
+Once per run, immediately after the first startup `G28` that homes Y (either
+all-axis `G28` or an explicit Y home), FlowFix inserts:
+
+```gcode
+G0 Y-0.8
+G92 Y0
+```
+
+Changing the field changes the negative Y coordinate; **0 disables insertion**.
+X-only or Z-only homes are skipped, and homes after the first detected layer
+marker never trigger insertion. A missing startup Y home generates a visible
+warning and a zero insertion count. New commands use the source newline style.
+Depth and insertion count are recorded in the process event.
+
+The move requires absolute positioning and millimetres. FlowFix assumes normal
+`G90`/`G21` startup defaults, tracks explicit `G91`/`G20`, and rejects insertion
+when either conflicting mode is active; it never silently changes modes.
+Use explicit `G90` and `G21` in the slicer's start code. The inserted move inherits
+the current feedrate; verify the depth, travel speed, and firmware's negative-Y
+travel/soft-limit behavior on your printer before use.
+
+An existing startup negative-Y G0/G1 followed by `G92 Y0` is rejected while this
+feature is enabled, to avoid a double plunge. Remove that pair from the slicer's
+start code and re-import the newly sliced original, or set depth to 0 to retain
+the existing sequence. FlowFix does not rewrite/delete source commands.
+
+Saved settings predating this feature load with **0 mm**, preserving historical
+behavior and reproducibility. When reopening such an original, set the field
+explicitly to 0.8 if you want the new feature. Old JSON events are not rewritten.
 
 Layer detection uses Cura-style `;LAYER:n` and optional `;LAYER_COUNT:n`. Without
 a count, the maximum layer index plus one is used. Without compatible layer

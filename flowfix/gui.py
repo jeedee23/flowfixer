@@ -1,7 +1,8 @@
 # File: flowfix/gui.py
 # Purpose: Responsive Tkinter editor with original-specific revision history.
-# Version: 0.2.1 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.1 - Scale table rows to fonts and reserve visible revision space.
+# Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+# Changelog: 0.2.2 - Expose plunge depth and processing warnings.
+# 0.2.1 - Scale table rows to fonts and reserve visible revision space.
 # 0.2.0 - Add asynchronous import/process, history, compare and recovery.
 
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -26,6 +27,7 @@ SETTING_LABELS = {
     "number_last_layers": "Last layer count",
     "last_layers_restore_flow_percent": "Last-layer flow (%)",
     "output_suffix": "Export suffix",
+    "plunge_into_belt_mm": "Plunge into belt (mm; 0 = off)",
 }
 
 
@@ -132,7 +134,7 @@ class App(tk.Tk):
             text="Priority: low Y > inclusive custom range > first layers > last layers > default. "
                  "Only G1 with explicit Y triggers a change. Y is height; Z is belt travel.",
             wraplength=1100,
-        ).grid(row=4, column=0, columnspan=4, sticky="w")
+        ).grid(row=((len(SETTING_LABELS) + 3) // 4) * 2, column=0, columnspan=4, sticky="w")
 
         ranges = ttk.LabelFrame(controls_frame, text="Between-layer ranges (both bounds inclusive)", padding=8)
         ranges.pack(fill="x", padx=10, pady=4)
@@ -417,7 +419,7 @@ class App(tk.Tk):
             try:
                 values[name] = (
                     value if name == "output_suffix"
-                    else float(value) if name == "threshold_y" else int(value)
+                    else float(value) if name in {"threshold_y", "plunge_into_belt_mm"} else int(value)
                 )
             except ValueError as exc:
                 raise ValueError(f"Invalid number for {SETTING_LABELS[name]}.") from exc
@@ -453,12 +455,16 @@ class App(tk.Tk):
         )
 
     def _processed(self, event):
+        warnings = event["results"]["warnings"]
+        self.warning_var.set("\n".join(warnings))
         messagebox.showinfo(
             "Revision committed",
             f"Created {event['output_revision_id']}\n"
             f"Low inserts: {event['results']['inserted_low_m221']}; "
-            f"restore inserts: {event['results']['inserted_restore_m221']}\n\n"
-            "Use Export revision to save a copy outside the workspace.",
+            f"restore inserts: {event['results']['inserted_restore_m221']}\n"
+            f"Belt plunges: {event['results']['inserted_belt_plunges']}\n\n"
+            "Use Export revision to save a copy outside the workspace."
+            + ("\n\nWarnings:\n" + "\n".join(warnings) if warnings else ""),
             parent=self,
         )
         self._refresh()

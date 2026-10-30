@@ -1,7 +1,8 @@
 # File: tests/test_gui.py
 # Purpose: Real-Tk smoke tests for asynchronous revision workflows.
-# Version: 0.2.1 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.1 - Verify readable rows and actual pointer selection on scaled Tk.
+# Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+# Changelog: 0.2.2 - Verify plunge UI parsing, restore and saved output.
+# 0.2.1 - Verify readable rows and actual pointer selection on scaled Tk.
 # 0.2.0 - Exercise range editing, history, export and worker failures.
 
 from pathlib import Path
@@ -191,6 +192,26 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(tree.selection(), (revision,))
         self.assertEqual(self.app._selected_revisions(1), [revision])
         self.assertTrue(self.app.settings_canvas.yview()[1] < 1.0)
+
+    def test_plunge_setting_applied_persisted_and_restored(self):
+        self.source.write_bytes(b"G90\nG21\nG28\n;LAYER:0\nG1 Y1\n")
+        self.import_source()
+        self.assertEqual(self.app.setting_vars["plunge_into_belt_mm"].get(), "0.8")
+        self.app.setting_vars["plunge_into_belt_mm"].set("1.2")
+        self.app._run()
+        self.wait()
+        revision = self.app.revision_tree.get_children()[0]
+        event = next(e for e in self.app.events if e["type"] == "process")
+        self.assertEqual(event["settings"]["plunge_into_belt_mm"], 1.2)
+        self.assertEqual(event["results"]["inserted_belt_plunges"], 1)
+        path = self.workspace.revision_path(self.app.original_id, revision)
+        self.assertIn(b"G28\nG0 Y-1.2\nG92 Y0\n", path.read_bytes())
+        self.app.setting_vars["plunge_into_belt_mm"].set("0")
+        self.app.revision_tree.selection_set(revision)
+        self.app._restore()
+        self.wait()
+        self.assertEqual(self.app.setting_vars["plunge_into_belt_mm"].get(), "1.2")
+        self.showerror.assert_not_called()
 
 
 if __name__ == "__main__":

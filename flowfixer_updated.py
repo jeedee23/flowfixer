@@ -1,7 +1,8 @@
 # File: flowfixer_updated.py
 # Purpose: Cross-platform FlowFix desktop application entry point.
-# Version: 0.2.0 | Created: unknown (baseline predates handoff) | Modified: 2026-10-25
-# Changelog: 0.2.0 - Extract core/GUI/storage; add workspace and verification options.
+# Version: 0.2.2 | Created: unknown (baseline predates handoff) | Modified: 2026-10-29
+# Changelog: 0.2.2 - Remove stray character preventing application startup.
+# 0.2.0 - Extract core/GUI/storage; add workspace and verification options.
 
 import argparse
 import json

@@ -1,7 +1,8 @@
 # File: tests/test_core.py
 # Purpose: Regression tests for flow priorities and lossless streaming.
-# Version: 0.2.0 | Created: 2026-10-25 | Modified: 2026-10-25
-# Changelog: 0.2.0 - Cover baseline semantics and byte-preservation fixes.
+# Version: 0.2.2 | Created: 2026-10-25 | Modified: 2026-10-29
+# Changelog: 0.2.2 - Cover post-homing plunge, mode guards and old settings.
+# 0.2.0 - Cover baseline semantics and byte-preservation fixes.
 
 import io
 from pathlib import Path
@@ -143,6 +144,82 @@ class CoreTests(unittest.TestCase):
         finally:
             tracemalloc.stop()
         self.assertLess(peak, 2 * 1024 * 1024)
+
+    def test_default_plunge_immediately_after_homing(self):
+        data = b"G90\nG21\nG28 ;home\nG92 E0\n;LAYER:0\nG1 Y1\n"
+        output, result = self.transform(data)
+        self.assertIn(b"G28 ;home\nG0 Y-0.8\nG92 Y0\nG92 E0\n", output)
+        self.assertEqual(result["inserted_belt_plunges"], 1)
+
+    def test_custom_plunge_newlines_and_homing_at_eof(self):
+        for ending in (b"\n", b"\r\n", b"\r"):
+            for trailing in (ending, b""):
+                with self.subTest(ending=ending, trailing=trailing):
+                    output, result = self.transform(
+                        b"G21" + ending + b"G90" + ending + b"g28 y0" + trailing,
+                        FlowFixSettings(plunge_into_belt_mm=1.25),
+                    )
+                    self.assertTrue(output.endswith(
+                        b"g28 y0" + ending + b"G0 Y-1.25" + ending + b"G92 Y0" + ending
+                    ))
+                    self.assertEqual(result["inserted_belt_plunges"], 1)
+
+    def test_axis_specific_homing_and_one_plunge_only(self):
+        output, result = self.transform(b"G28 X\nG28 Z\nG28 Y\nG28\n;LAYER:0\nG28\n")
+        self.assertTrue(output.startswith(b"G28 X\nG28 Z\nG28 Y\nG0 Y-0.8\nG92 Y0\nG28\n"))
+        self.assertEqual(output.count(b"G0 Y-0.8"), 1)
+        self.assertEqual(result["inserted_belt_plunges"], 1)
+
+    def test_plunge_disabled_leaves_homing_unchanged(self):
+        data = b"G28\nG0 Y-0.7\nG92 Y0\n"
+        output, result = self.transform(data, FlowFixSettings(plunge_into_belt_mm=0))
+        self.assertEqual(output, data)
+        self.assertEqual(result["inserted_belt_plunges"], 0)
+        self.assertFalse(any("Plunge not inserted" in w for w in result["warnings"]))
+
+    def test_existing_startup_plunge_is_rejected_not_doubled(self):
+        for movement in (b"G0", b"G1"):
+            with self.subTest(movement=movement), self.assertRaisesRegex(ValueError, "already contains"):
+                self.transform(b"G28\n" + movement + b" Y-0.7\n; offset\nG92 Y0\n;LAYER:0\n")
+
+    def test_plunge_rejects_relative_or_inch_modes(self):
+        for mode in (b"G91", b"G20"):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, "requires G90"):
+                self.transform(mode + b"\nG28\n")
+        output, _ = self.transform(b"G91\nG20\nG90\nG21\nG28\n")
+        self.assertIn(b"G28\nG0 Y-0.8\nG92 Y0\n", output)
+
+    def test_missing_startup_y_homing_warns_and_does_not_invent_plunge(self):
+        for data in (
+            b";G28\n;LAYER:0\nG28\n", b"G28 X Z\n", b"G280\n", b"G28.1\n",
+        ):
+            with self.subTest(data=data):
+                baseline, _ = self.transform(data, FlowFixSettings(plunge_into_belt_mm=0))
+                output, result = self.transform(data)
+                self.assertEqual(output, baseline)
+                self.assertEqual(result["inserted_belt_plunges"], 0)
+                self.assertTrue(any("Plunge not inserted" in w for w in result["warnings"]))
+
+    def test_homing_comments_do_not_change_axis_detection(self):
+        output, _ = self.transform(b"G28 X (Y not homed)\nG28 (home all)\n")
+        self.assertEqual(output, b"G28 X (Y not homed)\nG28 (home all)\nG0 Y-0.8\nG92 Y0\n")
+
+    def test_legacy_settings_restore_without_enabling_plunge(self):
+        legacy = FlowFixSettings().to_dict()
+        del legacy["plunge_into_belt_mm"]
+        loaded = FlowFixSettings.from_dict(legacy)
+        self.assertEqual(loaded.plunge_into_belt_mm, 0)
+        output, result = self.transform(b"G28\n", loaded)
+        self.assertEqual(output, b"G28\n")
+        self.assertEqual(result["inserted_belt_plunges"], 0)
+
+    def test_plunge_validation(self):
+        for value in (-0.8, float("nan"), float("inf"), True, "0.8"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "Plunge into belt"):
+                FlowFixSettings(plunge_into_belt_mm=value).validate()
+        for value in (0, 0.8, 1):
+            settings = FlowFixSettings(plunge_into_belt_mm=value)
+            self.assertEqual(FlowFixSettings.from_dict(settings.to_dict()), settings)
 
 
 if __name__ == "__main__":

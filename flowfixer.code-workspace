@@ -2,6 +2,10 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"name": "Niimbot-labels",
+			"path": "../Niimbot-labels"
 		}
 	],
 	"settings": {}

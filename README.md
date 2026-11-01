@@ -23,6 +23,13 @@ On Windows, use `py -3` instead of `python3`. Python must include Tkinter
 graphical desktop. No pip dependencies are required. Windows code paths are
 implemented, but native Windows smoke testing is still required.
 
+## Off-device repository backups
+
+For scheduled, encrypted backups of all your local repositories (including
+uncommitted work and `.git`) on Windows, see the optional
+[Google Drive backup setup](docs/google-drive-backup.md). It uses restic and
+rclone independently of FlowFix; the application still has no pip dependencies.
+
 ## Workflow
 
 1. **Import original** using the file chooser (`.gcode`, `.gco`, `.gc`).

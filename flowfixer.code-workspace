@@ -6,6 +6,14 @@
 		{
 			"name": "Niimbot-labels",
 			"path": "../Niimbot-labels"
+		},
+		{
+			"name": "nondeploy",
+			"path": "../nondeploy"
+		},
+		{
+			"name": "githubcommitall",
+			"path": "../githubcommitall"
 		}
 	],
 	"settings": {}
